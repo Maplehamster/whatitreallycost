@@ -60,7 +60,8 @@ export default function SubmitPage() {
     setLoading(true)
     setError('')
 
-    const { error: insertError } = await supabase
+    // Insert listing and get back the ID
+    const { data: insertData, error: insertError } = await supabase
       .from('listings')
       .insert({
         user_id: user.id,
@@ -79,11 +80,26 @@ export default function SubmitPage() {
         overall_experience: form.overallExperience || null,
         happy_to_be_contacted: form.happyToBeContacted,
       })
+      .select()
+      .single()
 
     if (insertError) {
       setError(insertError.message)
       setLoading(false)
       return
+    }
+
+    // Upload photos
+    if (form.photos.length > 0 && insertData) {
+      const listingId = insertData.id
+      for (let i = 0; i < form.photos.length; i++) {
+        const photo = form.photos[i]
+        const ext = photo.name.split('.').pop()
+        const path = `${listingId}/${i}.${ext}`
+        await supabase.storage
+          .from('listing-photos')
+          .upload(path, photo, { contentType: photo.type })
+      }
     }
 
     setSubmitted(true)
@@ -171,25 +187,21 @@ export default function SubmitPage() {
             {step === 1 && (
               <div>
                 <p className="text-gray-500 text-sm mb-4">Tell us the basics about where and when you built.</p>
-
                 <label className={labelClass}>Region</label>
                 <select className={inputClass} value={form.region} onChange={e => update('region', e.target.value)}>
                   <option value="">Select a region...</option>
                   {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
-
                 <label className={labelClass}>Year completed</label>
                 <select className={inputClass} value={form.year} onChange={e => update('year', e.target.value)}>
                   <option value="">Select a year...</option>
                   {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
-
                 <label className={labelClass}>House type</label>
                 <select className={inputClass} value={form.houseType} onChange={e => update('houseType', e.target.value)}>
                   <option value="">Select...</option>
                   {HOUSE_TYPES.map(h => <option key={h} value={h}>{h}</option>)}
                 </select>
-
                 <label className={labelClass}>Floor area (m²) <span className="font-normal text-gray-400">— optional</span></label>
                 <input className={inputClass} type="number" placeholder="e.g. 220" value={form.floorArea} onChange={e => update('floorArea', e.target.value)} />
               </div>
@@ -203,7 +215,6 @@ export default function SubmitPage() {
                 </div>
                 <label className={labelClass}>Builder name</label>
                 <input className={inputClass} type="text" placeholder="e.g. Fowler Homes" value={form.builderName} onChange={e => update('builderName', e.target.value)} />
-
                 <label className={labelClass}>Builder city or town</label>
                 <input className={inputClass} type="text" placeholder="e.g. Hamilton" value={form.builderCity} onChange={e => update('builderCity', e.target.value)} />
               </div>
@@ -213,39 +224,31 @@ export default function SubmitPage() {
             {step === 3 && (
               <div>
                 <p className="text-gray-500 text-sm mb-4">All figures in NZD. Exact amounts only visible to signed-in users.</p>
-
                 <div className="bg-teal-50 border border-teal-200 rounded-lg px-4 py-3 mb-2">
                   <div className="text-xs font-bold text-teal-700 uppercase tracking-wide mb-1">Build Costs</div>
                   <p className="text-xs text-teal-600">House construction only — not land, land remediation or landscaping.</p>
                 </div>
-
                 <label className={labelClass}>Original quote (NZD)</label>
                 <input className={inputClass} type="number" placeholder="e.g. 550000" value={form.quoteAmount} onChange={e => update('quoteAmount', e.target.value)} />
-
                 <label className={labelClass}>Final build cost (NZD)</label>
                 <input className={inputClass} type="number" placeholder="e.g. 620000" value={form.actualAmount} onChange={e => update('actualAmount', e.target.value)} />
-
                 {form.quoteAmount && form.actualAmount && Number(form.actualAmount) > Number(form.quoteAmount) && (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mt-2 text-sm text-amber-800">
                     ⚠ ${(Number(form.actualAmount) - Number(form.quoteAmount)).toLocaleString()} over quote ({Math.round(((Number(form.actualAmount) - Number(form.quoteAmount)) / Number(form.quoteAmount)) * 100)}% overrun)
                   </div>
                 )}
-
                 <div className="mt-6 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 mb-2">
                   <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">Landscaping & External Works</div>
                   <p className="text-xs text-gray-500">Optional. Kept separate so build cost comparisons stay accurate.</p>
                 </div>
-
                 <label className={labelClass}>Landscaping cost (NZD) <span className="font-normal text-gray-400">— optional</span></label>
                 <input className={inputClass} type="number" placeholder="e.g. 25000" value={form.landscapingAmount} onChange={e => update('landscapingAmount', e.target.value)} />
-
                 <label className={labelClass}>Build cost range — for public display <span className="text-red-400">*</span></label>
                 <p className={hintClass}>What non-logged-in visitors see. Based on final build cost, excluding land and landscaping.</p>
                 <select className={inputClass} value={form.costRange} onChange={e => update('costRange', e.target.value)}>
                   <option value="">Select a range...</option>
                   {COST_RANGES.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
-
                 <label className={labelClass}>Reason for variance <span className="font-normal text-gray-400">— optional</span></label>
                 <p className={hintClass}>Why did the final cost differ from the quote?</p>
                 <textarea
@@ -263,7 +266,6 @@ export default function SubmitPage() {
                 <div className="bg-teal-50 border border-teal-200 rounded-lg px-4 py-3 mb-4 text-sm text-teal-700">
                   💡 Both fields are optional — but this is often the most valuable part for people researching a build.
                 </div>
-
                 <label className={labelClass}>Lessons learnt <span className="font-normal text-gray-400">— optional</span></label>
                 <p className={hintClass}>What would you do differently? What surprised you?</p>
                 <textarea
@@ -272,7 +274,6 @@ export default function SubmitPage() {
                   value={form.lessonsLearnt}
                   onChange={e => update('lessonsLearnt', e.target.value)}
                 />
-
                 <label className={labelClass}>Overall experience <span className="font-normal text-gray-400">— optional</span></label>
                 <p className={hintClass}>How was the process? Would you recommend your builder?</p>
                 <textarea
@@ -304,13 +305,11 @@ export default function SubmitPage() {
                 {form.photos.length > 0 && (
                   <p className="text-xs text-teal-600 font-bold mt-2">✓ {form.photos.length} photo{form.photos.length > 1 ? 's' : ''} selected</p>
                 )}
-
                 {!user && (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mt-4 text-sm text-amber-800">
                     ⚠ You need to <a href="/login" className="font-bold underline">sign in</a> before you can submit a listing.
                   </div>
                 )}
-
                 <div className="mt-5 bg-gray-50 border border-gray-200 rounded-lg px-4 py-4 flex items-start gap-3">
                   <input
                     type="checkbox"
@@ -323,7 +322,6 @@ export default function SubmitPage() {
                     I am happy for other signed-in users to contact me privately with questions about my build
                   </label>
                 </div>
-
                 <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-4 flex items-start gap-3">
                   <input
                     type="checkbox"
@@ -336,7 +334,6 @@ export default function SubmitPage() {
                     <strong>I confirm</strong> this information is accurate and reflects my genuine personal experience of this build
                   </label>
                 </div>
-
                 {error && (
                   <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 mt-4">
                     {error}
@@ -355,7 +352,6 @@ export default function SubmitPage() {
                   ← Back
                 </button>
               ) : <div />}
-
               {step < 5 ? (
                 <button
                   onClick={() => setStep(s => s + 1)}
